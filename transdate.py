@@ -1,24 +1,42 @@
-"""transdate -- date Implementation for Asian Lunisolar Calendar
-Copyright (c) 2004-2005, Kang Seonghoon (Tokigun).
-This module is distributable under the GNU LGPL.
+"""transdate -- Python implementation of Asian lunisolar calendar
+Copyright (c) 2004-2006, Kang Seonghoon aka Tokigun.
+
+This module declares lunardate class which represents a day of Asian
+lunisolar calendar. lunardate class is compatible with datetime.date
+class, so you can use both lunardate and date interchangeably.
+
+lunardate class can handle date between 1881-01-30 (lunar 1881-01-01)
+and 2051-02-10 (lunar 2050-12-29). Since lunisolar calendar table is
+based on Korea Astronomy & Space Science Institute, it can be
+different with calendars used by other countries.
+
+In order to reduce size of bytecode, all of numeric table is stored as
+Unicode string (capable for range between 0 and 65535). If your Python
+is not compiled with Unicode, use transdate_nounicode.py instead.
 """
 
-__author__ = 'Kang Seonghoon'
-__version__ = '1.0'
+__author__ = 'Kang Seonghoon aka Tokigun'
+__version__ = '1.1 (2006-06-18)'
+__copyright__ = 'Copyright (c) 2004-2006 Kang Seonghoon aka Tokigun'
+__license__ = 'LGPL'
 
-__all__ = ['sol2lun', 'lun2sol', 'date', 'timedelta', 'lunardate', 'getganzistr']
+__all__ = ['sol2lun', 'lun2sol', 'date', 'timedelta', 'solardate',
+           'lunardate', 'getganzistr', 'strftime']
 
-from datetime import *
-import locale
+from datetime import date, timedelta
+import locale, time
 
 ###################################################################################
+## Lunisolar Calendar Table
 
-_const_year = 1881
-_const_min = 686686 # 1881.1.30 (lunar 1881.1.1)
-_const_max = 748788 # 2051.2.10 (lunar 2050.12.29)
-_const_locale = locale.getdefaultlocale()[0].split('_')[0]
+_BASEYEAR = 1881
+_MINDATE = 686686 # 1881.1.30 (lunar 1881.1.1)
+_MAXDATE = 748788 # 2051.2.10 (lunar 2050.12.29)
+_DEFAULTLOCALE = locale.getdefaultlocale()[0].split('_')[0]
+try: import re; _STRFTIMEREGEXP = re.compile('(?<!%)((?:%%)*)%L(.)')
+except ImportError: _STRFTIMEREGEXP = None
 
-_table_days = u"\0\u001D\u003B\u0058\u0076\u0093\u00B1\u00CF\u00EC\u010A\u0128\
+_MONTHTABLE = u"\0\u001D\u003B\u0058\u0076\u0093\u00B1\u00CF\u00EC\u010A\u0128\
 \u0145\u0163\u0180\u019D\u01BB\u01D8\u01F6\u0213\u0231\u024E\u026C\u028A\u02A7\
 \u02C5\u02E3\u0300\u031D\u033B\u0358\u0375\u0393\u03B0\u03CE\u03EC\u040A\u0427\
 \u0445\u0463\u0480\u049D\u04BB\u04D8\u04F5\u0513\u0530\u054E\u056C\u0589\u05A7\
@@ -181,28 +199,28 @@ _table_days = u"\0\u001D\u003B\u0058\u0076\u0093\u00B1\u00CF\u00EC\u010A\u0128\
 \uEFB4\uEFD2\uEFEF\uF00D\uF02A\uF048\uF066\uF083\uF0A1\uF0BF\uF0DC\uF0FA\uF117\
 \uF135\uF152\uF16F\uF18D\uF1AA\uF1C8\uF1E5\uF203\uF221\uF23E\uF25C\uF27A\uF297"
 
-_table_months = u"\u0000\u000D\u0019\u0025\u0032\u003E\u004A\u0057\u0063\u006F\
-\u007C\u0088\u0095\u00A1\u00AD\u00BA\u00C6\u00D2\u00DF\u00EB\u00F8\u0104\u0110\
-\u011D\u0129\u0135\u0142\u014E\u015A\u0167\u0173\u0180\u018C\u0198\u01A5\u01B1\
-\u01BD\u01CA\u01D6\u01E3\u01EF\u01FB\u0208\u0214\u0220\u022D\u0239\u0245\u0252\
-\u025E\u026B\u0277\u0283\u0290\u029C\u02A8\u02B5\u02C1\u02CE\u02DA\u02E6\u02F3\
-\u02FF\u030B\u0318\u0324\u0330\u033D\u0349\u0356\u0362\u036E\u037B\u0387\u0393\
-\u03A0\u03AC\u03B9\u03C5\u03D1\u03DE\u03EA\u03F6\u0403\u040F\u041B\u0428\u0434\
-\u0441\u044D\u0459\u0466\u0472\u047E\u048B\u0497\u04A4\u04B0\u04BC\u04C9\u04D5\
-\u04E1\u04EE\u04FA\u0507\u0513\u051F\u052C\u0538\u0544\u0551\u055D\u0569\u0576\
-\u0582\u058F\u059B\u05A7\u05B4\u05C0\u05CC\u05D9\u05E5\u05F1\u05FE\u060A\u0617\
-\u0623\u062F\u063C\u0648\u0654\u0661\u066D\u067A\u0686\u0692\u069F\u06AB\u06B7\
-\u06C4\u06D0\u06DC\u06E9\u06F5\u0702\u070E\u071A\u0727\u0733\u073F\u074C\u0758\
-\u0765\u0771\u077D\u078A\u0796\u07A2\u07AF\u07BB\u07C7\u07D4\u07E0\u07ED\u07F9\
-\u0805\u0812\u081E\u082A"
+_YEARTABLE = u"\00\u000D\u0019\u0025\u0032\u003E\u004A\u0057\u0063\u006F\u007C\
+\u0088\u0095\u00A1\u00AD\u00BA\u00C6\u00D2\u00DF\u00EB\u00F8\u0104\u0110\u011D\
+\u0129\u0135\u0142\u014E\u015A\u0167\u0173\u0180\u018C\u0198\u01A5\u01B1\u01BD\
+\u01CA\u01D6\u01E3\u01EF\u01FB\u0208\u0214\u0220\u022D\u0239\u0245\u0252\u025E\
+\u026B\u0277\u0283\u0290\u029C\u02A8\u02B5\u02C1\u02CE\u02DA\u02E6\u02F3\u02FF\
+\u030B\u0318\u0324\u0330\u033D\u0349\u0356\u0362\u036E\u037B\u0387\u0393\u03A0\
+\u03AC\u03B9\u03C5\u03D1\u03DE\u03EA\u03F6\u0403\u040F\u041B\u0428\u0434\u0441\
+\u044D\u0459\u0466\u0472\u047E\u048B\u0497\u04A4\u04B0\u04BC\u04C9\u04D5\u04E1\
+\u04EE\u04FA\u0507\u0513\u051F\u052C\u0538\u0544\u0551\u055D\u0569\u0576\u0582\
+\u058F\u059B\u05A7\u05B4\u05C0\u05CC\u05D9\u05E5\u05F1\u05FE\u060A\u0617\u0623\
+\u062F\u063C\u0648\u0654\u0661\u066D\u067A\u0686\u0692\u069F\u06AB\u06B7\u06C4\
+\u06D0\u06DC\u06E9\u06F5\u0702\u070E\u071A\u0727\u0733\u073F\u074C\u0758\u0765\
+\u0771\u077D\u078A\u0796\u07A2\u07AF\u07BB\u07C7\u07D4\u07E0\u07ED\u07F9\u0805\
+\u0812\u081E\u082A"
 
-_table_leap = "\7\0\0\5\0\0\4\0\0\2\0\6\0\0\5\0\0\3\0\10\0\0\5\0\0\4\0\0\2\0\6\
+_LEAPTABLE = "\7\0\0\5\0\0\4\0\0\2\0\6\0\0\5\0\0\3\0\10\0\0\5\0\0\4\0\0\2\0\6\
 \0\0\5\0\0\2\0\7\0\0\5\0\0\4\0\0\2\0\6\0\0\5\0\0\3\0\7\0\0\6\0\0\4\0\0\2\0\7\0\
 \0\5\0\0\3\0\10\0\0\6\0\0\4\0\0\3\0\7\0\0\5\0\0\4\0\10\0\0\6\0\0\4\0\12\0\0\6\
 \0\0\5\0\0\3\0\10\0\0\5\0\0\4\0\0\2\0\7\0\0\5\0\0\3\0\11\0\0\5\0\0\4\0\0\2\0\6\
 \0\0\5\0\0\3\0\13\0\0\6\0\0\5\0\0\2\0\7\0\0\5\0\0\3"
 
-_table_ganzi = {
+_GANZIMAP = {
     'ko': u'\uac11\uc744\ubcd1\uc815\ubb34\uae30\uacbd\uc2e0\uc784\uacc4\uc790'
           u'\ucd95\uc778\ubb18\uc9c4\uc0ac\uc624\ubbf8\uc2e0\uc720\uc220\ud574',
     'ja': u'\u7532\u4e59\u4e19\u4e01\u620a\u5df1\u5e9a\u8f9b\u58ec\u7678\u5b50'
@@ -212,8 +230,9 @@ _table_ganzi = {
 }
 
 ###################################################################################
+## Basic Functions
 
-def __bisect(a, x):
+def _bisect(a, x):
     lo = 0; hi = len(a)
     while lo < hi:
         mid = (lo + hi) // 2
@@ -221,109 +240,132 @@ def __bisect(a, x):
         else: lo = mid + 1
     return lo - 1
 
-def sol2lun(year, month, day, leap = False):
+def sol2lun(year, month, day, leap=False):
     """sol2lun(year, month, day, leap=False) -> (year, month, day, leap)
-    Returns corresponding date in lunar calendar. leap is ignored."""
+    Returns corresponding date in lunar calendar. leap will be ignored."""
     days = date(year, month, day).toordinal()
-    if not _const_min <= days <= _const_max:
-        return ValueError, "year is out of range"
-    days -= _const_min
-    month = __bisect(_table_days, days)
-    year = __bisect(_table_months, month)
-    month, day = month - ord(_table_months[year]) + 1, days - ord(_table_days[month]) + 1
-    if (ord(_table_leap[year]) or 13) < month:
+    if not _MINDATE <= days <= _MAXDATE:
+        raise ValueError, "year is out of range"
+    days -= _MINDATE
+    month = _bisect(_MONTHTABLE, days)
+    year = _bisect(_YEARTABLE, month)
+    month, day = month - ord(_YEARTABLE[year]) + 1, days - ord(_MONTHTABLE[month]) + 1
+    if (ord(_LEAPTABLE[year]) or 13) < month:
         month -= 1
-        leap = (ord(_table_leap[year]) == month)
+        leap = (ord(_LEAPTABLE[year]) == month)
     else:
         leap = False
-    return (year + _const_year, month, day, leap)
+    return (year + _BASEYEAR, month, day, leap)
 
-def lun2sol(year, month, day, leap = False):
+def lun2sol(year, month, day, leap=False):
     """lun2sol(year, month, day, leap=False) -> (year, month, day, leap)
     Returns corresponding date in solar calendar."""
-    year -= _const_year
-    if not 0 <= year < len(_table_months):
+    year -= _BASEYEAR
+    if not 0 <= year < len(_YEARTABLE):
         raise ValueError, "year is out of range"
     if not 1 <= month <= 12:
         raise ValueError, "wrong month"
-    if leap and ord(_table_leap[year]) != month:
+    if leap and ord(_LEAPTABLE[year]) != month:
         raise ValueError, "wrong leap month"
-    months = ord(_table_months[year]) + month - 1
-    if leap or (ord(_table_leap[year]) or 13) < month:
+    months = ord(_YEARTABLE[year]) + month - 1
+    if leap or (ord(_LEAPTABLE[year]) or 13) < month:
         months += 1
-    days = ord(_table_days[months]) + day - 1
-    if day < 1 or days >= ord(_table_days[months + 1]):
+    days = ord(_MONTHTABLE[months]) + day - 1
+    if day < 1 or days >= ord(_MONTHTABLE[months + 1]):
         raise ValueError, "wrong day"
-    return date.fromordinal(days + _const_min).timetuple()[:3] + (False,)
+    return date.fromordinal(days + _MINDATE).timetuple()[:3] + (False,)
 
-def getganzistr(index, locale = None):
+def getganzistr(index, locale=None):
     """getganzistr(index, locale=None) -> unicode string
     Returns corresponding unicode string of ganzi.
     locale can be "ko", "ja", "zh". Uses default locale when locale is ignored."""
-    if locale is None: locale = _const_locale
-    return _table_ganzi[locale][index%10] + _table_ganzi[locale][10+index%12]
+    locale = locale or _DEFAULTLOCALE
+    return _GANZIMAP[locale][index%10] + _GANZIMAP[locale][10+index%12]
 
-class lunardate(object):
+def strftime(format, t=None):
+    """strftime(format, t=None) -> string
+    Returns formatted string of given timestamp. If timestamp is omitted,
+    current timestamp (return value of time.localtime()) is used.
+
+    Similar to time.strftime, but has the following extensions:
+      %LC - (year / 100) as a decimal number (at least 2 digits)
+      %Ld - lunar day of the month as a decimal number [01,30]
+      %Le - same as %Ld, but preceding blank instead of zero
+      %LF - same as "%LY-%Lm-%Ld"
+      %Lj - day of the lunar year as a decimal number [001,390]
+      %Ll - 0 for non-leap month, 1 for leap month
+      %Lm - lunar month as a decimal number [01,12]
+      %Ly - lunar year without century as a decimal number [00,99]
+      %LY - lunar year with century as a decimal number
+    """
+    if t is None: t = time.localtime()
+    if _STRFTIMEREGEXP is not None:
+        lt = sol2lun(*t[:3])
+        lord = date(t[0], t[1], t[2]).toordinal() - _MINDATE
+        ldoy = lord - ord(_MONTHTABLE[ord(_YEARTABLE[lt[0] - _BASEYEAR])]) + 1
+        lmap = {'Y': '%04d' % lt[0], 'm': '%02d' % lt[1], 'd': '%02d' % lt[2],
+                'y': '%02d' % (lt[0] % 100), 'C': '%02d' % (lt[0] // 100),
+                'F': '%04d-%02d-%02d' % lt[:3], 'e': str(lt[2]),
+                'l': '%d' % lt[3], 'j': '%03d' % ldoy}
+        format = _STRFTIMEREGEXP.sub(lambda m: '%' * (len(m.group(1)) / 2) +
+                                               lmap.get(m.group(2), ''), format)
+    return time.strftime(format, t)
+
+###################################################################################
+## Class Declaration
+
+# just alias. we have lunardate, so why not we have solardate?
+solardate = date
+
+class lunardate(date):
     """lunardate(year, month, day, leap=False) -> new lunardate object"""
-    __slots__ = ['solardate', 'lunaryear', 'lunarmonth', 'lunarday', 'lunarleap']
-    
-    def __init__(self, year, month, day, leap = False):
-        object.__setattr__(self, 'solardate', date(*lun2sol(year, month, day, leap)[:3]))
-        object.__setattr__(self, 'lunaryear', year)
-        object.__setattr__(self, 'lunarmonth', month)
-        object.__setattr__(self, 'lunarday', day)
-        object.__setattr__(self, 'lunarleap', leap)
+
+    def __new__(cls, year, month, day, leap=False):
+        obj = date.__new__(cls, *lun2sol(year, month, day, leap)[:3])
+        object.__setattr__(obj, 'lunaryear', year)
+        object.__setattr__(obj, 'lunarmonth', month)
+        object.__setattr__(obj, 'lunarday', day)
+        object.__setattr__(obj, 'lunarleap', leap)
+        return obj
     
     def __repr__(self):
         return '%s.%s(%d, %d, %d, %s)' % \
                (self.__class__.__module__, self.__class__.__name__,
                 self.lunaryear, self.lunarmonth, self.lunarday, self.lunarleap)
     
-    def __hash__(self):
-        return self.__solardate.__hash__()
-    
-    def __getattr__(self, name):
-        """Attributes or methods in date can be used.
-        lunardate.min -> The earliest representable date, lunardate(1881, 1, 1, False)
-        lunardate.max -> The latest representable date, lunardate(2050, 12, 29, False)
-        lunardate.resolution -> Same as date.resolution, timedelta(days=1)"""
-        if name == 'min':
-            return self.fromordinal(_const_min)
-        elif name == 'max':
-            return self.fromordinal(_const_max)
-        elif name == 'resolution':
-            return timedelta(days=1)
-        else:
-            return getattr(self.solardate, name)
+    min = type('propertyproxy', (object,), {
+        '__doc__': 'lunardate.min -> The earliest representable date',
+        '__get__': lambda self, inst, cls: cls.fromordinal(_MINDATE)})()
+    max = type('propertyproxy', (object,), {
+        '__doc__': 'lunardate.max -> The latest representable date',
+        '__get__': lambda self, inst, cls: cls.fromordinal(_MAXDATE)})()
     
     def __setattr__(self, name, value):
-        raise AttributeError, "attribute '%s' of '%s.%s' objects is not writable." % \
-                              (name, self.__class__.__module__, self.__class__.__name__)
+        raise AttributeError, "can't set attribute."
     
     def __add__(self, other):
-        return self.fromsolardate(self.solardate + other)
+        return self.fromsolardate(date.__add__(self, other))
     
     def __radd__(self, other):
-        return self.fromsolardate(other + self.solardate)
+        return self.fromsolardate(date.__radd__(self, other))
     
     def __sub__(self, other):
-        temp = self.solardate - other
-        if not isinstance(temp, timedelta):
-            temp = self.fromsolardate(temp)
-        return temp
-    
-    def __cmp__(self, other):
-        return cmp(self.solardate, other)
-    
-    def replace(year = None, month = None, day = None, leap = None):
+        result = date.__sub__(self, other)
+        if not isinstance(result, timedelta):
+            result = self.fromsolardate(result)
+        return result
+
+    def replace(self, year=None, month=None, day=None, leap=None):
         """lunardate.replace(year, month, day, leap) -> new lunardate object
         Same as date.replace, but returns lunardate object instead of date object."""
-        return lunardate(year or self.lunaryear, month or self.lunarmonth, day or self.month, (leap is None) or self.lunarleap)
+        if leap is None: leap = self.lunarleap
+        return lunardate(year or self.lunaryear, month or self.lunarmonth,
+                         day or self.month, leap)
     
     def tosolardate(self):
         """lunardate.tosolardate() -> date object
         Returns corresponding date object."""
-        return self.solardate
+        return date(self.year, self.month, self.day)
     
     def today(self):
         """lunardate.today() -> new lunardate object
@@ -345,41 +387,73 @@ class lunardate(object):
         Returns corresponding lunardate object from Gregorian ordinal."""
         return self.fromsolardate(date.fromordinal(ordinal))
     
-    def tomorrow(self):
-        """lunardate.tomorrow() -> new lunardate object
-        Returns lunardate object which represents next day of lunardate object."""
-        year = self.lunaryear - _const_year
-        months = ord(_table_months[year]) + self.lunarmonth - 1
-        if self.lunarleap:
-            months += 1
-        elif (ord(_table_leap[year]) or 13) < self.lunarmonth:
-            months += 1
-        lastday = ord(_table_days[months+1]) - ord(_table_days[months])
-        if self.lunarday < lastday:
-            return lunardate(self.lunaryear, self.lunarmonth, self.lunarday + 1, self.lunarleap)
-        else:
-            return self + timedelta(days=1)
-
-    def yesterday(self):
-        """lunardate.yesterday() -> new lunardate object
-        Returns lunardate object which represents previous day of lunardate object."""
-        if self.lunarday > 1:
-            return lunardate(self.lunaryear, self.lunarmonth, self.lunarday - 1, self.lunarleap)
-        else:
-            return self - timedelta(days=1)
-
     def getganzi(self):
         """lunardate.getganzi() -> (year_ganzi, month_ganzi, day_ganzi)
         Returns ganzi index between 0..59 from lunardate object.
         Ganzi index can be converted using getganzistr function."""
-        return (
-            (self.lunaryear + 56) % 60,
-            (self.lunaryear * 12 + self.lunarmonth + 13) % 60,
-            (self.solardate.toordinal() + 14) % 60,
-        )
+        return ((self.lunaryear + 56) % 60,
+                (self.lunaryear * 12 + self.lunarmonth + 13) % 60,
+                (self.toordinal() + 14) % 60)
+
+    def getganzistr(self, locale=None):
+        """lunardate.getganzistr(locale=None) -> 3-tuple of unicode string
+        Returns unicode string of ganzi from lunardate object.
+        See getganzistr global function for detail."""
+        return tuple([getganzistr(i, locale) for i in self.getganzi()])
+
+    def strftime(self, format):
+        """lunardate.strftime(format) -> string
+        Returns formatted string of lunardate object.
+        See strftime global function for detail."""
+        return strftime(format, self.timetuple())
     
     today = classmethod(today)
     fromsolardate = classmethod(fromsolardate)
     fromtimestamp = classmethod(fromtimestamp)
     fromordinal = classmethod(fromordinal)
+
+# we create new lunardate class from old lunardate class using typeproxy,
+# because default type class always allows setting class variable.
+# __slots__ is added later to forbid descriptor initialization by type.
+class typeproxy(type):
+    def __setattr__(self, name, value):
+        raise AttributeError, "can't set attribute."
+clsdict = dict(lunardate.__dict__)
+clsdict['__slots__'] = ['lunaryear', 'lunarmonth', 'lunarday', 'lunarleap']
+lunardate = typeproxy(lunardate.__name__, lunardate.__bases__, clsdict)
+del typeproxy
+
+###################################################################################
+## Command Line Interface
+
+if __name__ == '__main__':
+    import sys
+    try:
+        mode = sys.argv[1].lower()
+        if mode == 'today':
+            if len(sys.argv) != 2: raise RuntimeError
+            today = lunardate.today()
+            isleap = today.lunarleap and ' (leap)' or ''
+            print today.strftime('Today: solar %Y-%m-%d %a = lunar %LY-%Lm-%Ld' + isleap)
+        elif mode == 'solar':
+            if len(sys.argv) != 5: raise RuntimeError
+            solar = lunardate.fromsolardate(date(*map(int, sys.argv[2:])))
+            isleap = solar.lunarleap and ' (leap)' or ''
+            print solar.strftime('solar %Y-%m-%d %a -> lunar %LY-%Lm-%Ld' + isleap)
+        elif mode == 'lunar':
+            if len(sys.argv) not in (5, 6): raise RuntimeError
+            leap = (len(sys.argv) == 6 and sys.argv[5].lower() == 'leap')
+            solar = lunardate(*(map(int, sys.argv[2:5]) + [leap]))
+            isleap = leap and ' (leap)' or ''
+            print solar.strftime('lunar %LY-%Lm-%Ld' + isleap + ' -> solar %Y-%m-%d %a')
+        else:
+            raise RuntimeError
+    except (IndexError, RuntimeError):
+        app = sys.argv[0]
+        print 'Usage:'
+        print '  for today - python %s today' % app
+        print '  for solar to lunar - python %s solar <year> <month> <day>' % app
+        print '  for lunar to solar - python %s lunar <year> <month> <day> [leap]' % app
+    except:
+        print 'Error: %s' % sys.exc_info()[1]
 
