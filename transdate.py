@@ -16,7 +16,7 @@ is not compiled with Unicode, use transdate_nounicode.py instead.
 """
 
 __author__ = 'Kang Seonghoon aka Tokigun'
-__version__ = '1.1 (2006-06-18)'
+__version__ = '1.1.1 (2006-06-25)'
 __copyright__ = 'Copyright (c) 2004-2006 Kang Seonghoon aka Tokigun'
 __license__ = 'LGPL'
 
@@ -359,8 +359,8 @@ class lunardate(date):
         """lunardate.replace(year, month, day, leap) -> new lunardate object
         Same as date.replace, but returns lunardate object instead of date object."""
         if leap is None: leap = self.lunarleap
-        return lunardate(year or self.lunaryear, month or self.lunarmonth,
-                         day or self.month, leap)
+        return self.__class__(year or self.lunaryear, month or self.lunarmonth,
+                              day or self.month, leap)
     
     def tosolardate(self):
         """lunardate.tosolardate() -> date object
@@ -375,7 +375,7 @@ class lunardate(date):
     def fromsolardate(self, solardate):
         """lunardate.fromsolardate(solardate) -> new lunardate object
         Returns corresponding lunardate object from date object."""
-        return lunardate(*sol2lun(*solardate.timetuple()[:3]))
+        return self(*sol2lun(*solardate.timetuple()[:3]))
     
     def fromtimestamp(self, timestamp):
         """lunardate.fromtimestamp(timestamp) -> new lunardate object
